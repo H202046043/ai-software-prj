@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>개인 업무 생산성 대시보드</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header>
+  <h1>개인 업무 생산성 대시보드</h1>
+  <form id="range">
+    <label>시작 <input type="date" id="start"></label>
+    <label>종료 <input type="date" id="end"></label>
+    <span class="presets">
+      <button type="button" data-days="7">7일</button>
+      <button type="button" data-days="30">30일</button>
+      <button type="button" data-days="90">90일</button>
+    </span>
+    <button type="submit" class="primary">조회</button>
+  </form>
+</header>
+
+<main>
+  <section class="kpis" id="kpis"></section>
+  <p class="note wide">작업 시간은 커밋 간격으로 추정한 값이에요: 직전 커밋과 <span id="gapMin">120</span>분 이내면 그 간격을, 아니면 커밋 전 <span id="firstMin">30</span>분을 작업 시간으로 계산해요.</p>
+
+  <section class="card wide">
+    <h2>이번 주 vs 지난 주</h2>
+    <div class="wow" id="wow"></div>
+  </section>
+
+  <section class="card wide">
+    <h2>일별 추정 작업 시간 · 커밋 추이</h2>
+    <canvas id="dailyChart" height="90"></canvas>
+  </section>
+
+  <section class="card">
+    <h2>시간대별 패턴</h2>
+    <canvas id="hourlyChart"></canvas>
+  </section>
+
+  <section class="card">
+    <h2>요일별 패턴</h2>
+    <canvas id="weekdayChart"></canvas>
+  </section>
+
+  <section class="card wide">
+    <h2>요일 × 시간대 추정 작업 시간 (분)</h2>
+    <div id="heatmap" class="heatmap"></div>
+  </section>
+
+  <section class="card">
+    <h2>프로젝트별 작업 시간 비중</h2>
+    <canvas id="projectChart"></canvas>
+  </section>
+
+  <section class="card">
+    <h2>프로젝트별 상세</h2>
+    <table id="projectTable"></table>
+  </section>
+
+  <section class="card wide">
+    <h2>최근 커밋</h2>
+    <table id="commitTable"></table>
+  </section>
+</main>
+
+<script src="/static/app.js"></script>
+</body>
+</html>

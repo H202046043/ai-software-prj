@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "dashboard-local",
+      "runtimeExecutable": "env",
+      "runtimeArgs": ["STORAGE_BACKEND=local", "uv", "run", "productivity", "serve", "--port", "8000"],
+      "port": 8000
+    },
+    {
+      "name": "dashboard",
+      "runtimeExecutable": "uv",
+      "runtimeArgs": ["run", "productivity", "serve", "--port", "8000"],
+      "port": 8000
+    }
+  ]
+}

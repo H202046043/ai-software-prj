@@ -1,0 +1,31 @@
+[project]
+name = "productivity"
+version = "0.1.0"
+description = "DuckDB와 MinIO 기반 개인 업무 생산성 분석 시스템"
+requires-python = ">=3.11"
+dependencies = [
+    "duckdb>=1.1",
+    "pyarrow>=17",
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "requests>=2.32",
+    "python-dotenv>=1.0",
+    "pytz>=2026.6",
+]
+
+[project.scripts]
+productivity = "productivity.cli:main"
+
+[dependency-groups]
+dev = ["pytest>=8", "httpx>=0.27"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/productivity"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]
