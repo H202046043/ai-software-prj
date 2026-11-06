@@ -4,7 +4,6 @@ const WEEKDAYS = ["월", "화", "수", "목", "금", "토", "일"];
 const C1 = "#2563eb", C2 = "#f59e0b";
 const PALETTE = ["#2563eb", "#f59e0b", "#10b981", "#ef4444", "#8b5cf6", "#06b6d4", "#ec4899", "#84cc16", "#64748b"];
 
-// toISOString 은 UTC 기준이라 한국 시간 오전에 하루 전 날짜가 되므로 로컬 날짜로 만든다.
 const fmtDate = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
 const hours = (min) => (min / 60).toFixed(1);

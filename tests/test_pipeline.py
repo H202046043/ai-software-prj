@@ -1,4 +1,3 @@
-"""수집 → 적재 → 분석 → API 전 구간 테스트 (로컬 저장소 백엔드 + 가짜 ActivityWatch)."""
 from __future__ import annotations
 
 import subprocess
@@ -15,7 +14,7 @@ from productivity.analytics import queries as q
 from productivity.analytics.db import connect
 from productivity.api import main as api
 from productivity.collectors import aw_collector as aw
-from productivity.collectors.git_collector import collect_commits, parse_git_log
+from productivity.collectors.git_collector import collect_commits, parse_git_log, resolve_author_emails
 from productivity.config import Settings
 
 KST = ZoneInfo("Asia/Seoul")
@@ -41,12 +40,11 @@ def repo_root(tmp_path: Path) -> Path:
                "GIT_COMMITTER_NAME": "me", "GIT_COMMITTER_EMAIL": "me@example.com"}
         git(repo, "commit", "-q", "-m", msg, env=env)
 
-    commit("first", "2026-11-02T10:15:00+09:00", "1\n2\n")        # 월 10시
-    commit("second", "2026-11-02T23:50:00+09:00", "1\n2\n3\n")    # 월 23시
-    commit("third", "2026-11-03T00:45:00+09:00", "1\n")           # 화 0시 (UTC 로는 11/2), 직전과 55분 간격
-    commit("old", "2026-10-27T14:00:00+09:00", "x\n")             # 지난 주 월
+    commit("first", "2026-11-02T10:15:00+09:00", "1\n2\n")
+    commit("second", "2026-11-02T23:50:00+09:00", "1\n2\n3\n")
+    commit("third", "2026-11-03T00:45:00+09:00", "1\n")
+    commit("old", "2026-10-27T14:00:00+09:00", "x\n")
     (root / "not_a_repo").mkdir()
-    # 히스토리를 공유하는 복사본 저장소: 같은 커밋이 두 번 집계되면 안 됨
     subprocess.run(["git", "clone", "-q", str(repo), str(root / "demo_copy")], check=True, capture_output=True)
     return root
 
@@ -60,7 +58,6 @@ def fake_events(day: date) -> list[dict]:
          "data": {"app": "Code", "title": "index.ts — web_front"}},
         {"timestamp": (base + timedelta(hours=2)).astimezone(timezone.utc).isoformat(), "duration": 600,
          "data": {"app": "Google Chrome", "title": "docs"}},
-        # 자정을 넘는 이벤트: 해당 날짜 몫(30분)만 남아야 함
         {"timestamp": (base + timedelta(hours=13, minutes=30)).astimezone(timezone.utc).isoformat(), "duration": 3600,
          "data": {"app": "IntelliJ IDEA", "title": "demo_app – late.py"}},
     ]
@@ -78,8 +75,15 @@ class FakeAW:
         return [fake_events(start.date())]
 
 
+def set_global_email(tmp_path: Path, monkeypatch, email: str | None) -> None:
+    cfg = tmp_path / "gitconfig"
+    cfg.write_text(f"[user]\n\temail = {email}\n" if email else "")
+    monkeypatch.setenv("GIT_CONFIG_GLOBAL", str(cfg))
+
+
 @pytest.fixture
 def settings(tmp_path: Path, repo_root: Path, monkeypatch) -> Settings:
+    set_global_email(tmp_path, monkeypatch, "me@example.com")
     monkeypatch.setattr(aw, "ActivityWatchClient", lambda url: FakeAW())
     monkeypatch.setattr(pipeline, "ActivityWatchClient", lambda url: FakeAW())
     return Settings(
@@ -102,7 +106,6 @@ def test_parse_git_log_handles_binary_and_merge():
 def test_collect_commits_uses_local_date(repo_root):
     rows = collect_commits([repo_root], date(2026, 11, 2), date(2026, 11, 2), KST)
     assert sorted(r["message"] for r in rows) == ["first", "second"]
-    # 복사본 저장소(demo_copy)의 같은 커밋은 제외되고, 이름순으로 먼저인 demo_app 에 귀속
     assert {r["repo"] for r in rows} == {"demo_app"}
 
 
@@ -111,6 +114,23 @@ def test_collect_commits_author_filter(repo_root):
     assert rows == []
     rows = collect_commits([repo_root], date(2026, 10, 1), date(2026, 11, 30), KST, ["me@example.com"])
     assert len(rows) == 4
+
+
+def test_resolve_author_emails(tmp_path, monkeypatch):
+    set_global_email(tmp_path, monkeypatch, "Me@Example.com")
+    assert resolve_author_emails(["school@x.ac.kr"]) == ["school@x.ac.kr"]
+    assert resolve_author_emails([]) == ["me@example.com"]
+    set_global_email(tmp_path, monkeypatch, None)
+    assert resolve_author_emails([]) == []
+
+
+def test_pipeline_uses_global_email_only_when_env_empty(settings, tmp_path, monkeypatch):
+    set_global_email(tmp_path, monkeypatch, "other@example.com")
+    s = pipeline.run(settings, date(2026, 11, 2), date(2026, 11, 3), activity=False)
+    assert s["authors"] == ["other@example.com"] and s["commits"] == 0
+    s = pipeline.run(replace(settings, git_author_emails=["me@example.com"]),
+                     date(2026, 11, 2), date(2026, 11, 3), activity=False)
+    assert s["authors"] == ["me@example.com"] and s["commits"] == 3
 
 
 def test_extract_project():
@@ -123,22 +143,16 @@ def test_extract_project():
 def test_full_pipeline_and_queries(settings):
     result = pipeline.run(settings, date(2026, 10, 26), date(2026, 11, 8))
     assert result["commits"] == 4
-    assert "activity" not in result  # ActivityWatch 는 기본 비활성
+    assert "activity" not in result
 
     files = sorted((settings.local_data_dir / "commits").rglob("*.parquet"))
-    assert len(files) == 3  # 커밋이 있는 날(10/27, 11/2, 11/3)만 파일 생성
+    assert len(files) == 3
     assert files[0].parent.name == "month=10" and files[-1].parent.name == "month=11"
 
-    # 재실행해도 중복 없음(멱등)
     pipeline.run(settings, date(2026, 11, 2), date(2026, 11, 3))
     con = connect(settings)
-    # 파티션 컬럼은 정수여야 프루닝 조건(month IN (...))이 정확히 걸린다 (month=0X 문자열 감지 방지)
     assert con.execute("SELECT DISTINCT typeof(year), typeof(month) FROM commits").fetchall() == [("BIGINT", "BIGINT")]
 
-    # 작업 시간 추정 (최대 간격 120분, 세션 첫 커밋 30분)
-    #  11/2 10:15  직전(10/27)과 간격 큼 → 09:45~10:15 (9시 15분 + 10시 15분)
-    #  11/2 23:50  간격 큼               → 23:20~23:50 (23시 30분)
-    #  11/3 00:45  직전과 55분           → 23:50~00:45 (11/2 23시 10분 + 11/3 0시 45분)
     s = q.summary(con, date(2026, 11, 2), date(2026, 11, 8))
     assert s["commits"] == 3
     assert s["work_hours"] == pytest.approx(round(115 / 60, 2))
@@ -151,9 +165,7 @@ def test_full_pipeline_and_queries(settings):
     assert hourly[10]["commits"] == 1 and hourly[23]["commits"] == 1
     assert (hourly[9]["work_min"], hourly[10]["work_min"], hourly[23]["work_min"]) == (15.0, 15.0, 40.0)
 
-    # 기간 시작일 하나만 조회해도 전날 커밋을 보고 세션을 이어 붙인다 (경계 처리)
     assert q.summary(con, date(2026, 11, 3), date(2026, 11, 3))["work_hours"] == pytest.approx(0.75)
-    # 파라미터 변경: 최대 간격 30분이면 00:45 커밋은 새 세션 → 00:15~00:45
     tight = q.WorkParams(max_gap_min=30, first_commit_min=30)
     assert q.summary(con, date(2026, 11, 3), date(2026, 11, 3), tight)["work_hours"] == pytest.approx(0.5)
 
@@ -166,7 +178,6 @@ def test_full_pipeline_and_queries(settings):
     assert wow["metrics"]["commits"]["change_pct"] == 200.0
     assert wow["metrics"]["work_hours"]["last_week"] == 0.5
 
-    # 월 경계를 걸치는 기간 (파티션 프루닝 조건)
     assert q.partition_filter(date(2026, 12, 30), date(2027, 1, 2)) == \
         "((year = 2026 AND month IN (12)) OR (year = 2027 AND month IN (1)))"
 
@@ -184,7 +195,6 @@ def test_activitywatch_optional_and_down_does_not_overwrite(settings, monkeypatc
     result = pipeline.run(settings, date(2026, 11, 2), date(2026, 11, 2))
     assert result["activity"] == "skipped"
     con = connect(settings)
-    # 기존 활동 데이터(코딩 1h + 0.5h + 자정 전 30분 = 2h)가 보존됨
     assert con.execute("SELECT sum(duration_sec) FILTER (WHERE is_coding) FROM activity").fetchall()[0][0] == 7200
 
 

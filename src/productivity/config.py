@@ -1,4 +1,3 @@
-"""환경 변수(.env) 기반 설정."""
 from __future__ import annotations
 
 import os
@@ -23,7 +22,7 @@ def _bool(value: str | None, default: bool = False) -> bool:
 
 @dataclass(frozen=True)
 class Settings:
-    storage_backend: str = "s3"  # "s3" | "local"
+    storage_backend: str = "s3"
     s3_endpoint: str = "localhost:9000"
     s3_access_key: str = "minioadmin"
     s3_secret_key: str = "minioadmin"
@@ -34,11 +33,9 @@ class Settings:
     timezone: str = "Asia/Seoul"
     git_repo_roots: list[Path] = field(default_factory=list)
     git_author_emails: list[str] = field(default_factory=list)
-    # 커밋 기반 작업 시간 추정 파라미터
     work_max_gap_min: int = 120
     work_first_commit_min: int = 30
 
-    # ActivityWatch 연동(선택, 기본 꺼짐)
     enable_activitywatch: bool = False
     activitywatch_url: str = "http://localhost:5600"
     coding_apps: list[str] = field(default_factory=list)
@@ -55,7 +52,6 @@ class Settings:
 
     @property
     def dataset_root(self) -> str:
-        """DuckDB/pyarrow 에서 사용할 데이터셋 루트 URI."""
         if self.storage_backend == "s3":
             return f"s3://{self.s3_bucket}"
         return str(self.local_data_dir)

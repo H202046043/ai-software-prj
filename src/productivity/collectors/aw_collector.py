@@ -1,9 +1,3 @@
-"""ActivityWatch 작업 시간 수집기.
-
-ActivityWatch(aw-server, 기본 http://localhost:5600) 의 Query API 로
-'자리 비움(AFK)이 아닌 시간'과 겹치는 활성 창 이벤트만 가져온다.
-가져온 이벤트는 날짜 경계로 잘라 하루 단위로 저장할 수 있게 만든다.
-"""
 from __future__ import annotations
 
 import json
@@ -16,8 +10,8 @@ import requests
 
 log = logging.getLogger(__name__)
 
-JETBRAINS_SEP = " – "   # en dash: "project – file.py"
-VSCODE_SEP = " — "      # em dash: "file.py — project"
+JETBRAINS_SEP = " – "
+VSCODE_SEP = " — "
 VSCODE_APPS = ("code", "cursor", "visual studio code")
 
 
@@ -55,7 +49,6 @@ class ActivityWatchClient:
 
 
 def find_host_buckets(buckets: dict) -> list[tuple[str, str, str]]:
-    """(hostname, window_bucket_id, afk_bucket_id) 목록."""
     by_host: dict[str, dict[str, str]] = {}
     for bid, meta in buckets.items():
         host = meta.get("hostname", "unknown")
@@ -87,11 +80,6 @@ def is_coding_app(app: str, coding_apps: list[str]) -> bool:
 
 
 def extract_project(app: str, title: str, known_projects: list[str]) -> str | None:
-    """창 제목에서 프로젝트 이름 추출.
-
-    1) 알려진 프로젝트(= git 저장소 이름)가 제목에 포함되면 그 이름
-    2) JetBrains: "project – file"  /  VS Code·Cursor: "file — project"
-    """
     if not title:
         return None
     for name in sorted(known_projects, key=len, reverse=True):
@@ -124,7 +112,6 @@ def normalize_events(
     for ev in events:
         start = datetime.fromisoformat(ev["timestamp"].replace("Z", "+00:00"))
         end = start + timedelta(seconds=float(ev.get("duration", 0)))
-        # 날짜 경계로 자르기
         start, end = max(start, day_start), min(end, day_end)
         dur = (end - start).total_seconds()
         if dur <= 0:

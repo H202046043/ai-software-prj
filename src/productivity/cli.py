@@ -1,13 +1,3 @@
-"""명령행 진입점.
-
-    productivity init                            # MinIO 버킷 생성
-    productivity collect                         # 어제 하루 수집·적재 (Cron 용 기본값)
-    productivity collect --date today
-    productivity collect --start 2026-10-01 --end 2026-11-06   # 기간 백필
-    productivity collect --no-activity           # Git 만
-    productivity query summary --days 30         # 분석 결과를 터미널에 출력
-    productivity serve                           # API + 대시보드 (http://localhost:8000)
-"""
 from __future__ import annotations
 
 import argparse
@@ -110,7 +100,7 @@ def main(argv: list[str] | None = None) -> int:
     )
     try:
         return args.func(args, Settings.from_env())
-    except Exception as exc:  # Cron 로그에 원인이 남도록
+    except Exception as exc:
         logging.getLogger("productivity").exception("실패: %s", exc)
         return 1
 

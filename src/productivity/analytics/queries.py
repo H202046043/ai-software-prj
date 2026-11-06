@@ -1,17 +1,3 @@
-"""생산성 분석 쿼리 세트.
-
-공통 규칙
-- 기간은 로컬 날짜(local_date) 기준 [start, end] 양끝 포함.
-- 커밋 수와 작업 시간 추정에서 머지 커밋은 제외한다.
-- year/month 파티션 조건을 함께 걸어 필요 없는 파티션 파일은 읽지 않게 한다(파티션 프루닝).
-
-작업 시간 추정 (커밋 기반 세션 추정, git-hours 방식)
-- 같은 작성자의 커밋을 시간순으로 정렬한다(저장소 구분 없음: 여러 저장소를 오가도 중복 집계 안 함).
-- 직전 커밋과의 간격이 max_gap_min 이하이면 → 그 간격 전체를 작업 시간으로 본다.
-- 간격이 더 길면(또는 첫 커밋이면) → 새 세션의 시작. 커밋 전 first_commit_min 분을 작업 시간으로 본다.
-- 각 커밋의 작업 구간 [시작, 커밋 시각]은 해당 커밋의 저장소(프로젝트)에 귀속된다.
-- 구간을 로컬 시각 기준 1시간 단위로 잘라서 시간대·요일·날짜별 집계에 정확히 나눠 담는다.
-"""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -24,18 +10,14 @@ WEEKDAYS_KO = ["월", "화", "수", "목", "금", "토", "일"]
 
 @dataclass(frozen=True)
 class WorkParams:
-    max_gap_min: int = 120        # 이 간격 이하면 연속 작업으로 간주
-    first_commit_min: int = 30    # 세션 첫 커밋 전 작업 시간
+    max_gap_min: int = 120
+    first_commit_min: int = 30
 
 
 DEFAULT_WORK = WorkParams()
 
 
 def partition_filter(start: date, end: date) -> str:
-    """기간에 걸치는 year/month 파티션만 읽도록 하는 조건식 (파티션 프루닝용).
-
-    값은 date 에서 계산한 정수뿐이라 SQL 에 직접 넣어도 안전하다.
-    """
     by_year: dict[int, list[int]] = {}
     y, m = start.year, start.month
     while (y, m) <= (end.year, end.month):
@@ -51,13 +33,6 @@ def _where(start: date, end: date) -> tuple[str, dict]:
 
 
 def _work_cte(start: date, end: date, wp: WorkParams) -> tuple[str, dict]:
-    """`work` CTE: (repo, local_date, local_hour, weekday, work_sec) — 1시간 단위 작업 시간 조각.
-
-    경계 처리: 작업 구간은 커밋 시각에서 최대 하루 미만만큼 과거로 뻗으므로
-    - 세션 판단용 직전 커밋을 찾으려고 시작일 하루 전부터 읽고
-    - 종료일 다음 날 새벽 커밋의 구간이 종료일로 넘어오는 몫을 잡으려고 종료일 하루 뒤까지 읽는다.
-    (max_gap_min, first_commit_min 이 하루보다 짧은 한 전체 데이터로 계산한 것과 같다.)
-    """
     if not 0 < wp.max_gap_min < 24 * 60 or not 0 <= wp.first_commit_min < 24 * 60:
         raise ValueError("max_gap_min 은 1~1439, first_commit_min 은 0~1439 이어야 합니다")
     buf_start, buf_end = start - timedelta(days=1), end + timedelta(days=1)
@@ -155,7 +130,6 @@ def hourly(con, start: date, end: date, wp: WorkParams = DEFAULT_WORK) -> list[d
 
 
 def weekday_hour_heatmap(con, start: date, end: date, wp: WorkParams = DEFAULT_WORK) -> list[dict]:
-    """요일(0=월) x 시간대 작업 시간(분)과 커밋 수."""
     w, p = _where(start, end)
     work, wp_params = _work_cte(start, end, wp)
     sql = f"""
@@ -186,7 +160,6 @@ def weekday_totals(con, start: date, end: date, wp: WorkParams = DEFAULT_WORK) -
 
 
 def projects(con, start: date, end: date, wp: WorkParams = DEFAULT_WORK) -> list[dict]:
-    """프로젝트(저장소)별 작업 시간·커밋 수와 비중(%)."""
     w, p = _where(start, end)
     work, wp_params = _work_cte(start, end, wp)
     sql = f"""
@@ -215,7 +188,6 @@ def projects(con, start: date, end: date, wp: WorkParams = DEFAULT_WORK) -> list
 
 
 def week_over_week(con, ref: date, wp: WorkParams = DEFAULT_WORK) -> dict:
-    """ref 가 속한 주(월~일)와 직전 주 비교. 증감률(%)은 직전 주가 0 이면 null."""
     this_start = ref - timedelta(days=ref.weekday())
     prev_start = this_start - timedelta(days=7)
     this = summary(con, this_start, this_start + timedelta(days=6), wp)

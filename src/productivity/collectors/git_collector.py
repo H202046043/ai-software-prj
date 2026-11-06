@@ -1,9 +1,3 @@
-"""Git 커밋 로그 수집기.
-
-`git log --all --numstat` 결과를 파싱해 커밋 단위 레코드로 정제한다.
-- 여러 브랜치에 같은 커밋이 있어도 해시 기준으로 1건만 남긴다.
-- 날짜 필터는 작성 시각(author date)의 로컬 날짜 기준이다.
-"""
 from __future__ import annotations
 
 import logging
@@ -14,12 +8,11 @@ from zoneinfo import ZoneInfo
 
 log = logging.getLogger(__name__)
 
-RS, US = "\x1e", "\x1f"  # 레코드/필드 구분자
+RS, US = "\x1e", "\x1f"
 PRETTY = f"--pretty=format:{RS}%H{US}%an{US}%ae{US}%aI{US}%P{US}%s"
 
 
 def discover_repos(roots: list[Path]) -> list[Path]:
-    """root 자체 또는 하위 1단계 디렉터리 중 git 저장소를 찾는다."""
     found: list[Path] = []
     for root in roots:
         if not root.is_dir():
@@ -51,7 +44,6 @@ def parse_git_log(output: str, repo: str, tz: ZoneInfo) -> list[dict]:
             if len(cols) != 3:
                 continue
             files += 1
-            # 바이너리 파일은 "-" 로 표시됨
             ins += int(cols[0]) if cols[0].isdigit() else 0
             dels += int(cols[1]) if cols[1].isdigit() else 0
 
@@ -84,19 +76,33 @@ def _git(repo: Path, args: list[str], stdin: str | None = None) -> str | None:
             check=True, encoding="utf-8", errors="replace",
         ).stdout
     except subprocess.CalledProcessError as exc:
-        # 커밋이 하나도 없는 저장소 등
         log.warning("[%s] git %s 실패: %s", repo.name, args[0], exc.stderr.strip())
         return None
 
 
-def collect_repo(repo: Path, start: date, end: date, tz: ZoneInfo) -> list[dict]:
-    """2단계 수집.
+def global_git_email() -> str | None:
+    try:
+        out = subprocess.run(
+            ["git", "config", "--global", "user.email"], capture_output=True, text=True, encoding="utf-8",
+        ).stdout.strip()
+    except FileNotFoundError:
+        return None
+    return out.lower() or None
 
-    git log --since 는 탐색 중 기준보다 오래된 커밋을 만나면 거기서 멈추므로
-    (브랜치 끝 커밋 날짜가 과거로 조작되었거나 rebase 된 경우 누락 발생) 사용하지 않는다.
-    1) 전체 커밋의 해시·작성일만 가볍게 읽어 작성일(로컬) 기준으로 거르고
-    2) 걸러진 커밋만 --numstat 으로 상세 조회한다.
-    """
+
+def resolve_author_emails(configured: list[str]) -> list[str]:
+    if configured:
+        log.info("수집 대상 작성자(.env): %s", ", ".join(configured))
+        return configured
+    email = global_git_email()
+    if email:
+        log.info("수집 대상 작성자(git 전역 설정): %s", email)
+        return [email]
+    log.warning("작성자 이메일을 찾지 못해 모든 작성자의 커밋을 수집합니다")
+    return []
+
+
+def collect_repo(repo: Path, start: date, end: date, tz: ZoneInfo) -> list[dict]:
     index = _git(repo, ["log", "--all", f"--pretty=format:%H{US}%aI"])
     if not index:
         return []
@@ -115,11 +121,6 @@ def collect_repo(repo: Path, start: date, end: date, tz: ZoneInfo) -> list[dict]
 def collect_commits(
     roots: list[Path], start: date, end: date, tz: ZoneInfo, author_emails: list[str] | None = None
 ) -> list[dict]:
-    """여러 저장소의 커밋을 모은다.
-
-    포크·복사본처럼 히스토리를 공유하는 저장소에서는 같은 커밋(해시)이 여러 번 나오므로
-    해시 기준으로 1건만 남긴다. 귀속 저장소는 탐색 순서(경로 이름순)에서 먼저 나온 쪽이다.
-    """
     seen: set[str] = set()
     shared = 0
     result: list[dict] = []

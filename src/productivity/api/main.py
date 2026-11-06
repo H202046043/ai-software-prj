@@ -1,7 +1,3 @@
-"""분석 결과 REST API + 대시보드 정적 파일 서빙.
-
-실행: uv run productivity serve  (또는 uvicorn productivity.api.main:app --reload)
-"""
 from __future__ import annotations
 
 from collections.abc import Iterator
@@ -27,7 +23,6 @@ def get_settings() -> Settings:
 
 
 def get_con(settings: Settings = Depends(get_settings)) -> Iterator:
-    # 요청마다 인메모리 연결을 새로 만든다: 스레드 안전하고, 새로 적재된 파일도 바로 반영된다.
     con = connect(settings)
     try:
         yield con

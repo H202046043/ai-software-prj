@@ -1,6 +1,4 @@
 #!/usr/bin/env bash
-# 매일 00:10 에 전날 데이터를 수집·적재하는 Cron 작업을 등록한다. (이미 있으면 교체)
-# 사용: ./scripts/install_cron.sh [시 분]   예) ./scripts/install_cron.sh 0 10
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
