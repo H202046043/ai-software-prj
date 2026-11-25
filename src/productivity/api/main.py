@@ -14,7 +14,7 @@ from ..config import Settings
 
 STATIC_DIR = Path(__file__).parent / "static"
 
-app = FastAPI(title="개인 업무 생산성 분석 API", version="0.1.0")
+app = FastAPI(title="개인 업무 생산성 분석 API", version="0.1.1")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 
