@@ -17,7 +17,10 @@ dependencies = [
 productivity = "productivity.cli:main"
 
 [dependency-groups]
-dev = ["pytest>=8", "httpx>=0.27"]
+dev = [
+    "httpx2>=2.16.2",
+    "pytest>=8",
+]
 
 [build-system]
 requires = ["hatchling"]
