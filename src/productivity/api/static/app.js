@@ -33,7 +33,7 @@ const dualAxis = {
   interaction: { mode: "index", intersect: false },
   scales: {
     y: { position: "left", title: { display: true, text: "작업 시간(분)" }, beginAtZero: true },
-    y1: { position: "right", title: { display: true, text: "커밋 수" }, beginAtZero: true, grid: { drawOnChartArea: false } },
+    y1: { position: "right", title: { display: true, text: "커밋 수" }, beginAtZero: true, ticks: { precision: 0 }, grid: { drawOnChartArea: false } },
   },
 };
 
@@ -43,7 +43,7 @@ function barLine(labels, rows) {
       labels,
       datasets: [
         { type: "bar", label: "추정 작업 시간(분)", data: rows.map((r) => r.work_min), backgroundColor: C1, yAxisID: "y" },
-        { type: "line", label: "커밋 수", data: rows.map((r) => r.commits), borderColor: C2, backgroundColor: C2, yAxisID: "y1", tension: 0.3 },
+        { type: "line", label: "커밋 수", data: rows.map((r) => r.commits), borderColor: C2, backgroundColor: C2, yAxisID: "y1", tension: 0 },
       ],
     },
     options: dualAxis,
@@ -109,7 +109,7 @@ async function load() {
   try {
     const [summary, daily, hourly, weekday, heatmap, projects, commits, wow] = await Promise.all([
       api("summary"), api("daily"), api("hourly"), api("weekday"), api("heatmap"),
-      api("projects"), api("commits"), fetch(`/api/week-over-week?ref=${$("end").value}`).then((r) => r.json()),
+      api("projects"), api("commits"), api("week-over-week", `&ref=${$("end").value}`),
     ]);
     renderKpis(summary);
     renderWow(wow);
